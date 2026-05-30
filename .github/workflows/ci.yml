@@ -1,0 +1,23 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  reference-impl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install --no-audit --no-fund
+      - name: Build + verify canonical example (test-mode, no network)
+        run: npm run build:example
+      - name: Run unit tests
+        run: npm test
+      - name: Show first event for log readability
+        run: head -n 1 examples/sample-output-stream.ndjson | node -e "process.stdin.on('data', d => console.log(JSON.stringify(JSON.parse(d.toString()), null, 2)))"

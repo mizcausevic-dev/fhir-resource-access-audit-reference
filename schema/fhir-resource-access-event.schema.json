@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mizcausevic-dev/fhir-resource-access-audit/blob/main/schema/fhir-resource-access-event.schema.json",
+  "title": "FHIR Resource Access Event",
+  "description": "A single audit event recording an AI-tool access to a FHIR resource. Bridges HL7 FHIR AuditEvent semantics to the Kinetic Gain Protocol Suite audit-stream hash-chained convention. Multiple events compose into an append-only chain via prev_hash.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "timestamp",
+    "kind",
+    "source",
+    "patient_ref",
+    "resource",
+    "action",
+    "outcome",
+    "agent",
+    "decision_card_ref",
+    "prev_hash",
+    "hash"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "description": "Globally unique event identifier. UUID v7 recommended (monotonic, sortable).",
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "description": "RFC 3339 timestamp when the access happened.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "description": "What kind of FHIR access this event records. Maps to FHIR AuditEvent.type but narrowed to the operations an AI-tool surface produces.",
+      "type": "string",
+      "enum": [
+        "fhir.resource.read",
+        "fhir.resource.search",
+        "fhir.resource.write",
+        "fhir.resource.export"
+      ]
+    },
+    "source": {
+      "description": "Logical name of the system that emitted the event. Convention: '<system>-<environment>' (e.g. 'epic-mychart-prod', 'rad-ai-chest-triage', 'rag-sentinel-staging').",
+      "type": "string",
+      "minLength": 1
+    },
+    "patient_ref": {
+      "description": "FHIR reference to the patient whose data was accessed. Format: 'Patient/<id>' per FHIR R4. Vault-token references (e.g. 'Patient/tok_a1b2...') are valid if the buyer's Decision Card vaulted patient identifiers.",
+      "type": "string",
+      "pattern": "^Patient/[A-Za-z0-9_-]+$"
+    },
+    "resource": {
+      "description": "The specific FHIR resource accessed.",
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "description": "FHIR resource type name (e.g. Patient, Observation, DocumentReference, Condition, Encounter).",
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "description": "Resource id within the source system. May be a vault-token reference when the buyer's Decision Card vaulted resource identifiers.",
+          "type": "string",
+          "minLength": 1
+        },
+        "version_id": {
+          "description": "Optional FHIR Meta.versionId at the time of access.",
+          "type": "string"
+        }
+      }
+    },
+    "action": {
+      "description": "FHIR AuditEvent.action coded value: Create (C), Read (R), Update (U), Delete (D), Execute (E).",
+      "type": "string",
+      "enum": ["C", "R", "U", "D", "E"]
+    },
+    "outcome": {
+      "description": "FHIR AuditEvent.outcome coded value: 0 = success, 4 = minor failure, 8 = serious failure, 12 = major failure.",
+      "type": "string",
+      "enum": ["0", "4", "8", "12"]
+    },
+    "agent": {
+      "description": "The AI tool that performed the access.",
+      "type": "object",
+      "required": ["ai_tool_card_url", "ai_decision_card_url"],
+      "additionalProperties": false,
+      "properties": {
+        "ai_tool_card_url": {
+          "description": "Canonical URL of the vendor's MCP Tool Card describing the tool that emitted this event. Lets the auditor pivot from one event to the full tool disclosure.",
+          "type": "string",
+          "format": "uri"
+        },
+        "ai_decision_card_url": {
+          "description": "Canonical URL of the buyer's Decision Card that authorized this access. Same value as the top-level decision_card_ref but kept inside agent for FHIR AuditEvent.agent-like parity.",
+          "type": "string",
+          "format": "uri"
+        },
+        "principal": {
+          "description": "Optional human-in-the-loop reference (e.g. radiologist on the case) if the AI access was invoked under a user session.",
+          "type": "string"
+        }
+      }
+    },
+    "decision_card_ref": {
+      "description": "Canonical URL of the Decision Card that authorized this access. Same as agent.ai_decision_card_url — duplicated at the top level so the buyer-side audit-stream consumer doesn't have to descend into agent for the common pivot.",
+      "type": "string",
+      "format": "uri"
+    },
+    "purpose_of_use": {
+      "description": "Optional FHIR purposeOfUse coded concept (e.g. 'TREAT' for treatment, 'HOPERAT' for healthcare operations, 'RESEARCH' for research). One of HL7's coded values: https://terminology.hl7.org/CodeSystem-v3-ActReason.html",
+      "type": "string"
+    },
+    "network": {
+      "description": "Optional source-network metadata. Useful when the AI tool runs in a tenant-isolated environment and the buyer wants the trail to include the egress side too.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_ip": {
+          "description": "May be a tokenized reference per the PHI vault contract profile (category #15).",
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["https", "wss", "stdio", "other"]
+        }
+      }
+    },
+    "redaction_applied": {
+      "description": "Names the fields that were tokenized, masked, or otherwise redacted via the buyer's Decision Card vault contract BEFORE the AI tool received the resource. Empty array means no redaction was applied. Lets an auditor verify the vault contract was honored end-to-end.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "action"],
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "description": "FHIRPath or simple field name within the resource (e.g. 'Patient.name', 'Observation.subject', 'DocumentReference.author').",
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "enum": ["tokenize", "mask", "hash", "drop"]
+          }
+        }
+      }
+    },
+    "signature": {
+      "description": "Optional ed25519 signature over the canonical-JSON of the event body excluding the signature field itself. base64-encoded.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alg", "value", "key_uri"],
+      "properties": {
+        "alg": {
+          "type": "string",
+          "enum": ["ed25519"]
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/=_-]+$"
+        },
+        "key_uri": {
+          "description": "URL where the signer's public key can be retrieved (JWK Set convention recommended).",
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "prev_hash": {
+      "description": "Hex-encoded SHA-256 hash of the previous event in the chain. 64 zeros for the first event.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "hash": {
+      "description": "Hex-encoded SHA-256 of the canonical-JSON of THIS event body excluding the hash field. Canonicalization: recursively sort object keys ascending and emit no whitespace.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

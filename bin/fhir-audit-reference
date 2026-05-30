@@ -1,0 +1,7 @@
+#!/usr/bin/env node
+import { main } from "../src/cli.mjs";
+
+main().then((code) => process.exit(code)).catch((err) => {
+  process.stderr.write(`ERROR: ${err.stack || err.message}\n`);
+  process.exit(2);
+});
