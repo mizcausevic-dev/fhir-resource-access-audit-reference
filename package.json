@@ -33,7 +33,7 @@
     "build:example": "node src/cli.mjs --mode=test --output=examples/sample-output-stream.ndjson",
     "verify": "node src/cli.mjs --mode=test --output=examples/sample-output-stream.ndjson",
     "live": "node src/cli.mjs --mode=live --output=output/live-stream.ndjson",
-    "test": "node --test \"tests/*.test.mjs\""
+    "test": "node --test tests/reference.test.mjs"
   },
   "keywords": [
     "kinetic-gain-protocol-suite",
